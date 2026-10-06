@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#173D62">
 <title>Captura de campo – Vías terciarias</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
 :root{--bg:#f5f5f5;--ink:#1d2a36;--mut:#5b6670;--line:#d3dce4;--card:#fff;--acc:#173D62;--sec:#2F7381;--ok:#4A7C2C;--err:#C92A2B;--warn:#A8620A;--gold:#E0AE13}
 @media(prefers-color-scheme:dark){:root{--bg:#0e1b29;--ink:#e8eef3;--mut:#9fb0bf;--line:#2a4058;--card:#16283a;--acc:#2F7381;--sec:#5AA9D8;--ok:#86C656;--err:#ff8a80;--warn:#F49F42;--gold:#E0AE13}}
@@ -38,6 +39,7 @@ button:disabled{opacity:.5}
 details summary{font-weight:700;cursor:pointer;padding:4px 0}
 .hint{color:var(--mut);font-size:.85rem;margin:6px 0 0}
 .stack{display:grid;gap:8px;margin-top:8px}
+#mapa{height:320px;border-radius:8px;border:1px solid var(--line);margin:10px 0 0;background:var(--line);position:relative;z-index:0}
 </style>
 </head>
 <body>
@@ -69,6 +71,9 @@ details summary{font-weight:700;cursor:pointer;padding:4px 0}
  <p class="hint">Camine o conduzca el tramo con el recorrido activo; se agrega un vértice cada 5 m. Mantenga la pantalla encendida.</p>
 </div>
 <div class="gps" id="gpsInfo" aria-live="polite">Sin ubicación todavía.</div>
+<button type="button" class="sec" id="btnMe" style="width:100%">Ver mi ubicación en el mapa</button>
+<div id="mapa"></div>
+<p class="hint" id="mapaHint"></p>
 
 <label for="fotos">Fotos</label>
 <input id="fotos" type="file" accept="image/*" capture="environment" multiple>
@@ -97,6 +102,7 @@ details summary{font-weight:700;cursor:pointer;padding:4px 0}
 </main>
 <div id="msg" role="status"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script>
 const BASE="https://portalgis.rmbc.gov.co/server/rest/services/RMBC/Proyecto_Inventario_Vias_Terciarias/FeatureServer";
 const CAPAS={0:"Equipamiento vial",1:"Establecimiento",2:"Equipamiento público",3:"Recorrido",4:"Red vial",5:"Punto de interés",6:"Infraestructura"};
@@ -163,7 +169,8 @@ async function elegir(id){
  $("btnSave").disabled=false;
  $("capaInfo").textContent=isLine()?"Capa de líneas: se registra un recorrido o tramo.":"Capa de puntos: se registra una ubicación.";
  $("geoPunto").hidden=isLine();$("geoLinea").hidden=!isLine();
- construir();showGeo();
+ construir();showGeo();drawSaved();
+ if(map)$("mapaHint").textContent=isLine()?"La línea roja es el tramo que está grabando; la verde azulada, lo ya guardado.":"Toque el mapa para ajustar la posición del punto. El punto celeste es usted; el verde azulado, lo ya guardado.";
 }
 function construir(){
  const box=$("campos");box.innerHTML="";
@@ -202,6 +209,7 @@ function showGeo(){
  const t=$("gpsInfo");
  if(isLine()){const n=line.length;let m=0;for(let i=1;i<n;i++)m+=dist(line[i-1],line[i]);t.textContent=n?`${n} vértice(s) · ${Math.round(m)} m aprox.`+(rec?" · grabando…":""):"Sin vértices todavía."}
  else t.textContent=pos?`Lat ${pos.lat.toFixed(6)}, Lon ${pos.lon.toFixed(6)}`+(pos.acc?` (precisión ±${Math.round(pos.acc)} m)`:" (manual)"):"Sin ubicación todavía.";
+ drawGeo();
 }
 const geoErr=e=>msg("No se obtuvo ubicación: "+e.message+". Revise el permiso de ubicación.",6000);
 $("btnGps").onclick=()=>{
@@ -266,6 +274,7 @@ async function render(){
  const r=(await all()).sort((a,b)=>b.creado-a.creado);
  $("list").innerHTML=r.length?r.map(x=>`<div class="rec"><div><b>${esc(x.attrs.nombre||CAPAS[x.layer])}</b><small>${esc(CAPAS[x.layer])} · ${new Date(x.creado).toLocaleString("es-CO",{dateStyle:"short",timeStyle:"short"})} · ${x.fotos.length} foto(s)</small><br><small class="${x.estado==="enviado"?"st-ok":x.estado==="error"?"st-e":"st-p"}">${x.estado==="enviado"?"Enviado (OBJECTID "+x.oid+")":x.estado==="error"?"Error: "+esc(x.err):"Pendiente de envío"}</small></div><button class="danger" data-d="${x.id}">Borrar</button></div>`).join(""):'<p class="hint">Aún no hay registros.</p>';
  $("btnSync").disabled=!r.some(x=>x.estado!=="enviado");
+ drawSaved();
 }
 $("list").onclick=async e=>{const id=e.target.dataset.d;if(!id)return;
  if(confirm("¿Borrar este registro del celular? Si ya se envió, no se borra del servicio.")){await del(+id);render()}};
@@ -299,8 +308,65 @@ $("btnSync").onclick=async()=>{
  msg(`Enviados: ${ok}. Con error: ${fail}.`,5000);render();
 };
 
+/* ---------- mapa ---------- */
+let map,ptMk,ptAcc,lineLy,savedLy,meMk,meAcc,meWatch=null;
+const ll=a=>[a[1],a[0]];
+function initMap(){
+ if(!window.L){$("mapa").remove();$("btnMe").hidden=true;$("mapaHint").textContent="El mapa necesita internet la primera vez que se abre la app.";return}
+ map=L.map("mapa").setView([4.65,-74.1],9);
+ const osm=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+ const sat=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Esri, Maxar, Earthstar Geographics"});
+ L.control.layers({"Calles":osm,"Satélite":sat}).addTo(map);
+ savedLy=L.layerGroup().addTo(map);
+ lineLy=L.polyline([],{color:"#EA3839",weight:5}).addTo(map);
+ ptMk=L.circleMarker([0,0],{radius:9,color:"#fff",weight:3,fillColor:"#EA3839",fillOpacity:1,interactive:false});
+ ptAcc=L.circle([0,0],{radius:1,color:"#5AA9D8",weight:1,fillOpacity:.15,interactive:false});
+ meMk=L.circleMarker([0,0],{radius:8,color:"#fff",weight:3,fillColor:"#5AA9D8",fillOpacity:1,interactive:false});
+ meAcc=L.circle([0,0],{radius:1,color:"#5AA9D8",weight:1,fillOpacity:.12,interactive:false});
+ map.on("click",e=>{
+  if(isLine())return;
+  pos={lat:e.latlng.lat,lon:e.latlng.lng,acc:0};
+  $("lat").value=pos.lat.toFixed(6);$("lon").value=pos.lon.toFixed(6);showGeo();
+ });
+}
+function drawGeo(){
+ if(!map)return;
+ let focus=null;
+ if(isLine()){
+  ptMk.remove();ptAcc.remove();
+  lineLy.setLatLngs(line.map(ll));
+  if(line.length)focus=ll(line[line.length-1]);
+ }else{
+  lineLy.setLatLngs([]);
+  if(pos){focus=[pos.lat,pos.lon];ptMk.setLatLng(focus).addTo(map);
+   if(pos.acc>0)ptAcc.setLatLng(focus).setRadius(pos.acc).addTo(map);else ptAcc.remove()}
+  else{ptMk.remove();ptAcc.remove()}
+ }
+ if(focus&&(map.getZoom()<15||!map.getBounds().contains(focus)))map.setView(focus,17);
+}
+async function drawSaved(){
+ if(!map)return;savedLy.clearLayers();
+ (await all()).filter(x=>x.layer===capa).forEach(x=>{
+  if(x.geom.paths)L.polyline(x.geom.paths[0].map(ll),{color:"#2F7381",weight:4,opacity:.8,interactive:false}).addTo(savedLy);
+  else L.circleMarker([x.geom.y,x.geom.x],{radius:6,color:"#fff",weight:2,fillColor:"#2F7381",fillOpacity:.9,interactive:false}).addTo(savedLy);
+ });
+}
+function stopMe(){if(meWatch!=null)navigator.geolocation.clearWatch(meWatch);meWatch=null;if(map){meMk.remove();meAcc.remove()}$("btnMe").textContent="Ver mi ubicación en el mapa"}
+$("btnMe").onclick=()=>{
+ if(!map)return;
+ if(meWatch!=null)return stopMe();
+ if(!navigator.geolocation)return msg("Este navegador no tiene GPS.");
+ let first=true;
+ meWatch=navigator.geolocation.watchPosition(p=>{
+  const c=[p.coords.latitude,p.coords.longitude];
+  meMk.setLatLng(c).addTo(map);meAcc.setLatLng(c).setRadius(p.coords.accuracy).addTo(map);
+  if(first){map.setView(c,Math.max(map.getZoom(),17));first=false}
+ },e=>{stopMe();geoErr(e)},{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+ $("btnMe").textContent="Dejar de mostrar mi ubicación";
+};
+
 /* ---------- inicio ---------- */
-(async()=>{await precargar();await elegir(+$("capa").value);render()})();
+(async()=>{initMap();await precargar();await elegir(+$("capa").value);render()})();
 if("storage" in navigator&&navigator.storage.persist)navigator.storage.persist();
 if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
