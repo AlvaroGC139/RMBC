@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#173D62">
+<title>Captura de campo – Vías terciarias</title>
+<style>
+:root{--bg:#f5f5f5;--ink:#1d2a36;--mut:#5b6670;--line:#d3dce4;--card:#fff;--acc:#173D62;--sec:#2F7381;--ok:#4A7C2C;--err:#C92A2B;--warn:#A8620A;--gold:#E0AE13}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1b29;--ink:#e8eef3;--mut:#9fb0bf;--line:#2a4058;--card:#16283a;--acc:#2F7381;--sec:#5AA9D8;--ok:#86C656;--err:#ff8a80;--warn:#F49F42;--gold:#E0AE13}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Segoe UI",Tahoma,Geneva,Verdana,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{background:linear-gradient(135deg,#173D62 0%,#2F7381 100%);border-bottom:4px solid var(--gold);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:5}
+header h1{font-size:1.05rem;margin:0;flex:1;font-weight:700}
+#net{font-size:.8rem;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.22)}
+main{max-width:560px;margin:0 auto;padding:14px 14px 90px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+h2{font-size:1rem;margin:0 0 10px;color:var(--acc);border-left:4px solid var(--gold);padding-left:8px}
+@media(prefers-color-scheme:dark){h2{color:#9CCFEB}}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:.92rem}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:12px}
+input:focus,select:focus,textarea:focus,button:focus-visible,summary:focus-visible{outline:3px solid var(--sec);outline-offset:1px}
+textarea{min-height:80px;resize:vertical}
+button{font:inherit;font-weight:700;border:0;border-radius:8px;padding:13px 16px;background:var(--acc);color:#fff;cursor:pointer}
+button.sec{background:transparent;color:var(--sec);border:1.5px solid var(--sec)}
+button.danger{background:transparent;color:var(--err);border:1.5px solid var(--err);padding:7px 10px;font-size:.85rem}
+button:disabled{opacity:.5}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.gps{font-size:.9rem;color:var(--mut);margin:8px 0;min-height:1.3em}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.rec{border-top:1px solid var(--line);padding:10px 0;display:flex;gap:10px;align-items:center}
+.rec:first-child{border-top:0}.rec div{flex:1;min-width:0}
+.rec b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec small{color:var(--mut)}
+.st-p{color:var(--warn)}.st-ok{color:var(--ok)}.st-e{color:var(--err)}
+#msg{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:8px;display:none;z-index:9;max-width:536px;margin:0 auto}
+details summary{font-weight:700;cursor:pointer;padding:4px 0}
+.hint{color:var(--mut);font-size:.85rem;margin:6px 0 0}
+.stack{display:grid;gap:8px;margin-top:8px}
+</style>
+</head>
+<body>
+<header><h1>Captura de campo – Vías terciarias</h1><span id="net">…</span></header>
+<main>
+
+<section>
+<label for="capa" style="margin-top:0">¿Qué va a registrar?</label>
+<select id="capa"></select>
+<p class="hint" id="capaInfo"></p>
+</section>
+
+<section>
+<h2>Nuevo registro</h2>
+<div id="campos"></div>
+
+<label>Ubicación</label>
+<div id="geoPunto">
+ <button type="button" class="sec" id="btnGps" style="width:100%">Tomar ubicación GPS</button>
+ <div class="row"><div><label for="lat">Latitud</label><input id="lat" inputmode="decimal" placeholder="4.7110"></div>
+ <div><label for="lon">Longitud</label><input id="lon" inputmode="decimal" placeholder="-74.0721"></div></div>
+ <p class="hint">Se llenan solas con el GPS; también puede escribirlas o corregirlas.</p>
+</div>
+<div id="geoLinea" hidden>
+ <div class="stack">
+  <button type="button" id="btnRec">Iniciar recorrido (grabar GPS)</button>
+  <div class="row"><button type="button" class="sec" id="btnVert">+ Vértice aquí</button><button type="button" class="sec" id="btnUndo">Deshacer</button></div>
+ </div>
+ <p class="hint">Camine o conduzca el tramo con el recorrido activo; se agrega un vértice cada 5 m. Mantenga la pantalla encendida.</p>
+</div>
+<div class="gps" id="gpsInfo" aria-live="polite">Sin ubicación todavía.</div>
+
+<label for="fotos">Fotos</label>
+<input id="fotos" type="file" accept="image/*" capture="environment" multiple>
+<div class="thumbs" id="thumbs"></div>
+
+<button type="button" id="btnSave" style="width:100%;margin-top:16px">Guardar en el celular</button>
+</section>
+
+<section>
+<h2>Registros del celular</h2>
+<div id="list"></div>
+<button type="button" id="btnSync" style="width:100%;margin-top:10px">Enviar pendientes al servicio</button>
+</section>
+
+<section>
+<details><summary>Conexión al servicio</summary>
+<label for="usr">Usuario</label><input id="usr" autocomplete="username">
+<label for="pwd">Contraseña</label><input id="pwd" type="password" autocomplete="current-password">
+<button type="button" class="sec" id="btnTok" style="margin-top:10px">Obtener token</button>
+<label for="tok">Token (si ya tiene uno, péguelo aquí)</label><input id="tok" autocomplete="off">
+<label for="tokUrl">URL para generar token</label><input id="tokUrl">
+<p class="hint">Si el servicio permite editar sin iniciar sesión, deje el token vacío. La contraseña no se guarda; el token sí, en este celular.</p>
+<button type="button" class="sec" id="btnRefresh" style="margin-top:10px">Actualizar listas y capas del servicio</button>
+</details>
+</section>
+</main>
+<div id="msg" role="status"></div>
+
+<script>
+const BASE="https://portalgis.rmbc.gov.co/server/rest/services/RMBC/Proyecto_Inventario_Vias_Terciarias/FeatureServer";
+const CAPAS={0:"Equipamiento vial",1:"Establecimiento",2:"Equipamiento público",3:"Recorrido",4:"Red vial",5:"Punto de interés",6:"Infraestructura"};
+const SKIP=/^(objectid|globalid|created_user|created_date|last_edited_user|last_edited_date|shape__length|shape__area|fecha_registro)$/i;
+const INT=new Set(["esriFieldTypeSmallInteger","esriFieldTypeInteger"]),DBL=new Set(["esriFieldTypeDouble","esriFieldTypeSingle"]);
+const $=id=>document.getElementById(id);
+let schema=null,capa=0,pos=null,line=[],fotos=[],rec=null;
+
+/* ---------- utilidades ---------- */
+function msg(t,ms=3500){const m=$("msg");m.textContent=t;m.style.display="block";clearTimeout(msg.t);msg.t=setTimeout(()=>m.style.display="none",ms)}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const tk=()=>$("tok").value.trim();
+const isLine=()=>/Polyline/.test(schema?.geometryType||"");
+function net(){$("net").textContent=navigator.onLine?"En línea":"Sin conexión"}
+addEventListener("online",()=>{net();msg("Conexión recuperada. Puede enviar los pendientes.");precargar()});addEventListener("offline",net);net();
+function dist(a,b){const R=6371000,r=Math.PI/180,dl=(b[1]-a[1])*r,dn=(b[0]-a[0])*r,h=Math.sin(dl/2)**2+Math.cos(a[1]*r)*Math.cos(b[1]*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+
+/* ---------- IndexedDB ---------- */
+const dbp=new Promise((res,rej)=>{const r=indexedDB.open("captura_terciarias",1);
+ r.onupgradeneeded=()=>r.result.createObjectStore("reg",{keyPath:"id",autoIncrement:true});
+ r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function tx(mode,fn){const db=await dbp;return new Promise((res,rej)=>{const t=db.transaction("reg",mode);const q=fn(t.objectStore("reg"));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error)})}
+const all=()=>tx("readonly",s=>s.getAll()),put=r=>tx("readwrite",s=>s.put(r)),del=id=>tx("readwrite",s=>s.delete(id));
+
+/* ---------- conexión / token ---------- */
+$("tok").value=localStorage.getItem("tok")||"";
+$("usr").value=localStorage.getItem("usr")||"";
+$("tokUrl").value=localStorage.getItem("tokUrl")||"https://portalgis.rmbc.gov.co/portal/sharing/rest/generateToken";
+["tok","usr","tokUrl"].forEach(i=>$(i).onchange=()=>localStorage.setItem(i,$(i).value.trim()));
+$("btnTok").onclick=async()=>{
+ try{
+  const web=location.protocol.startsWith("http");
+  const b=new URLSearchParams({f:"json",username:$("usr").value.trim(),password:$("pwd").value,expiration:"1440",client:web?"referer":"requestip"});
+  if(web)b.set("referer",location.origin);
+  const j=await (await fetch($("tokUrl").value.trim(),{method:"POST",body:b})).json();
+  if(!j.token)throw new Error(j.error?.message||"Sin token");
+  $("tok").value=j.token;localStorage.setItem("tok",j.token);$("pwd").value="";msg("Token obtenido.");precargar(true);
+ }catch(e){msg("No se pudo obtener el token: "+e.message,6000)}
+};
+
+/* ---------- esquemas de las capas (se guardan para uso sin señal) ---------- */
+async function loadSchema(id,force){
+ const k="schema_"+id;
+ if(navigator.onLine){
+  try{const p=new URLSearchParams({f:"json"});if(tk())p.set("token",tk());
+   const j=await (await fetch(`${BASE}/${id}?${p}`)).json();
+   if(j.fields){localStorage.setItem(k,JSON.stringify(j));return j}}catch(e){}
+ }
+ const c=localStorage.getItem(k);return c?JSON.parse(c):null;
+}
+async function precargar(force){if(navigator.onLine){await Promise.all(Object.keys(CAPAS).map(i=>loadSchema(i,force)))}}
+$("btnRefresh").onclick=async()=>{await precargar(true);await elegir(capa);msg("Capas y listas actualizadas.")};
+
+/* ---------- selector de capa y formulario ---------- */
+$("capa").innerHTML=Object.entries(CAPAS).map(([i,n])=>`<option value="${i}">${n}</option>`).join("");
+$("capa").value=localStorage.getItem("capa")||"0";
+$("capa").onchange=()=>{if(rec)stopRec();elegir(+$("capa").value)};
+
+async function elegir(id){
+ capa=id;localStorage.setItem("capa",id);
+ schema=await loadSchema(id);
+ line=[];pos=null;fotos=[];$("thumbs").innerHTML="";["lat","lon"].forEach(i=>$(i).value="");
+ if(!schema){$("campos").innerHTML="";$("capaInfo").textContent="Abra la app una vez con internet para cargar esta capa.";$("btnSave").disabled=true;return}
+ $("btnSave").disabled=false;
+ $("capaInfo").textContent=isLine()?"Capa de líneas: se registra un recorrido o tramo.":"Capa de puntos: se registra una ubicación.";
+ $("geoPunto").hidden=isLine();$("geoLinea").hidden=!isLine();
+ construir();showGeo();
+}
+function construir(){
+ const box=$("campos");box.innerHTML="";
+ schema.fields.filter(f=>f.editable!==false&&!SKIP.test(f.name)&&!/OID|GlobalID|Geometry/.test(f.type)).forEach(f=>{
+  const id="f_"+f.name,lb=document.createElement("label");lb.htmlFor=id;lb.textContent=f.alias&&f.alias!==f.name?f.alias:f.name;box.append(lb);
+  const dom=f.domain?.type==="codedValue"?f.domain.codedValues:null;let el;
+  if(dom&&dom.length<=20){
+   el=document.createElement("select");el.innerHTML='<option value="">Seleccione…</option>'+dom.map(d=>`<option value="${esc(d.code)}">${esc(d.name)}</option>`).join("");
+  }else if(dom){
+   el=document.createElement("input");el.setAttribute("list","dl_"+f.name);el.placeholder="Escriba para buscar…";el.autocomplete="off";
+   const dl=document.createElement("datalist");dl.id="dl_"+f.name;dl.innerHTML=dom.map(d=>`<option value="${esc(d.name)}"></option>`).join("");box.append(dl);
+  }else if(INT.has(f.type)||DBL.has(f.type)){
+   el=document.createElement("input");el.type="number";el.step=INT.has(f.type)?"1":"any";el.inputMode=INT.has(f.type)?"numeric":"decimal";
+  }else if(f.length>=200){el=document.createElement("textarea");el.maxLength=f.length}
+  else{el=document.createElement("input");if(f.length)el.maxLength=f.length;el.autocomplete="off"}
+  el.id=id;el.dataset.f=f.name;box.append(el);
+ });
+}
+function recolectar(){
+ const a={};
+ document.querySelectorAll("[data-f]").forEach(el=>{
+  const f=schema.fields.find(x=>x.name===el.dataset.f);let v=el.value.trim();if(v==="")return;
+  const dom=f.domain?.type==="codedValue"?f.domain.codedValues:null;
+  if(dom){const m=dom.find(d=>String(d.code)===v)||dom.find(d=>d.name.toLowerCase()===v.toLowerCase());
+   if(!m)throw new Error(`Valor no válido en «${f.alias||f.name}». Elíjalo de la lista.`);v=m.code}
+  if(INT.has(f.type))v=parseInt(v,10);else if(DBL.has(f.type))v=parseFloat(String(v).replace(",","."));
+  if(typeof v==="number"&&isNaN(v))throw new Error(`Número no válido en «${f.alias||f.name}».`);
+  a[f.name]=v;
+ });
+ const fr=schema.fields.find(f=>/^fecha_registro$/i.test(f.name));if(fr)a[fr.name]=Date.now();
+ return a;
+}
+
+/* ---------- ubicación: puntos ---------- */
+function showGeo(){
+ const t=$("gpsInfo");
+ if(isLine()){const n=line.length;let m=0;for(let i=1;i<n;i++)m+=dist(line[i-1],line[i]);t.textContent=n?`${n} vértice(s) · ${Math.round(m)} m aprox.`+(rec?" · grabando…":""):"Sin vértices todavía."}
+ else t.textContent=pos?`Lat ${pos.lat.toFixed(6)}, Lon ${pos.lon.toFixed(6)}`+(pos.acc?` (precisión ±${Math.round(pos.acc)} m)`:" (manual)"):"Sin ubicación todavía.";
+}
+const geoErr=e=>msg("No se obtuvo ubicación: "+e.message+". Revise el permiso de ubicación.",6000);
+$("btnGps").onclick=()=>{
+ if(!navigator.geolocation)return msg("Este navegador no tiene GPS. Ingrese las coordenadas a mano.");
+ $("gpsInfo").textContent="Buscando señal…";let best=null;
+ const id=navigator.geolocation.watchPosition(p=>{
+  if(!best||p.coords.accuracy<best.acc)best={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};
+  pos=best;showGeo();$("lat").value=best.lat.toFixed(6);$("lon").value=best.lon.toFixed(6);
+  if(best.acc<=5)navigator.geolocation.clearWatch(id);
+ },e=>{navigator.geolocation.clearWatch(id);geoErr(e)},{enableHighAccuracy:true,timeout:30000,maximumAge:0});
+ setTimeout(()=>navigator.geolocation.clearWatch(id),15000);
+};
+function manual(){const la=parseFloat($("lat").value.replace(",",".")),lo=parseFloat($("lon").value.replace(",","."));
+ if(isFinite(la)&&isFinite(lo)&&Math.abs(la)<=90&&Math.abs(lo)<=180){pos={lat:la,lon:lo,acc:(pos&&pos.lat===la&&pos.lon===lo)?pos.acc:0};showGeo()}}
+$("lat").oninput=$("lon").oninput=manual;
+
+/* ---------- ubicación: líneas ---------- */
+let wake=null;
+async function stopRec(){if(rec!=null)navigator.geolocation.clearWatch(rec);rec=null;$("btnRec").textContent="Iniciar recorrido (grabar GPS)";try{await wake?.release()}catch(e){}wake=null;showGeo()}
+$("btnRec").onclick=async()=>{
+ if(rec!=null)return stopRec();
+ if(!navigator.geolocation)return msg("Este navegador no tiene GPS.");
+ try{wake=await navigator.wakeLock?.request("screen")}catch(e){}
+ rec=navigator.geolocation.watchPosition(p=>{
+  const c=p.coords;if(c.accuracy>25)return;const n=[c.longitude,c.latitude],l=line[line.length-1];
+  if(!l||dist(l,n)>=5){line.push(n);showGeo()}
+ },e=>{stopRec();geoErr(e)},{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+ $("btnRec").textContent="Detener recorrido";showGeo();
+};
+$("btnVert").onclick=()=>{
+ if(!navigator.geolocation)return msg("Este navegador no tiene GPS.");
+ navigator.geolocation.getCurrentPosition(p=>{line.push([p.coords.longitude,p.coords.latitude]);showGeo()},geoErr,{enableHighAccuracy:true,timeout:30000,maximumAge:0});
+};
+$("btnUndo").onclick=()=>{line.pop();showGeo()};
+document.addEventListener("visibilitychange",async()=>{if(rec!=null&&!document.hidden&&!wake){try{wake=await navigator.wakeLock?.request("screen")}catch(e){}}});
+
+/* ---------- fotos ---------- */
+$("fotos").onchange=e=>{
+ fotos=fotos.concat([...e.target.files]);e.target.value="";
+ $("thumbs").innerHTML="";fotos.forEach(f=>{const i=new Image();i.alt="Foto";i.src=URL.createObjectURL(f);$("thumbs").append(i)});
+};
+
+/* ---------- guardar local ---------- */
+$("btnSave").onclick=async()=>{
+ let attrs,geom;
+ try{attrs=recolectar()}catch(e){return msg(e.message,5000)}
+ if(isLine()){
+  if(rec!=null)stopRec();
+  if(line.length<2)return msg("El tramo necesita al menos 2 vértices.");
+  geom={paths:[line],spatialReference:{wkid:4326}};
+ }else{
+  manual();if(!pos)return msg("Falta la ubicación. Tome el GPS o ingrese coordenadas.");
+  geom={x:pos.lon,y:pos.lat,spatialReference:{wkid:4326}};
+ }
+ await put({layer:capa,estado:"pendiente",creado:Date.now(),attrs,geom,fotos:fotos.map(f=>({name:f.name||"foto.jpg",blob:f})),oid:null});
+ msg("Registro guardado en el celular.");
+ await elegir(capa);render();
+};
+
+/* ---------- lista ---------- */
+async function render(){
+ const r=(await all()).sort((a,b)=>b.creado-a.creado);
+ $("list").innerHTML=r.length?r.map(x=>`<div class="rec"><div><b>${esc(x.attrs.nombre||CAPAS[x.layer])}</b><small>${esc(CAPAS[x.layer])} · ${new Date(x.creado).toLocaleString("es-CO",{dateStyle:"short",timeStyle:"short"})} · ${x.fotos.length} foto(s)</small><br><small class="${x.estado==="enviado"?"st-ok":x.estado==="error"?"st-e":"st-p"}">${x.estado==="enviado"?"Enviado (OBJECTID "+x.oid+")":x.estado==="error"?"Error: "+esc(x.err):"Pendiente de envío"}</small></div><button class="danger" data-d="${x.id}">Borrar</button></div>`).join(""):'<p class="hint">Aún no hay registros.</p>';
+ $("btnSync").disabled=!r.some(x=>x.estado!=="enviado");
+}
+$("list").onclick=async e=>{const id=e.target.dataset.d;if(!id)return;
+ if(confirm("¿Borrar este registro del celular? Si ya se envió, no se borra del servicio.")){await del(+id);render()}};
+
+/* ---------- sincronización ---------- */
+async function post(url,body){const r=await fetch(url,{method:"POST",body});return r.json()}
+$("btnSync").onclick=async()=>{
+ if(!navigator.onLine)return msg("No hay conexión. Intente cuando tenga señal.");
+ $("btnSync").disabled=true;let ok=0,fail=0;
+ for(const x of (await all()).filter(r=>r.estado!=="enviado")){
+  const url=`${BASE}/${x.layer}`;
+  try{
+   if(!x.oid){
+    const b=new URLSearchParams({f:"json",features:JSON.stringify([{geometry:x.geom,attributes:x.attrs}])});if(tk())b.set("token",tk());
+    const j=await post(url+"/addFeatures",b);
+    if(j.error)throw new Error(j.error.message+(j.error.details?.[0]?" – "+j.error.details[0]:""));
+    const a=j.addResults?.[0];if(!a?.success)throw new Error(a?.error?.description||"El servicio rechazó el registro");
+    x.oid=a.objectId;await put(x); // evita duplicar si luego fallan las fotos
+   }
+   const rest=[];
+   for(const ft of x.fotos){
+    const fd=new FormData();fd.append("attachment",ft.blob,ft.name);fd.append("f","json");if(tk())fd.append("token",tk());
+    const j=await post(`${url}/${x.oid}/addAttachment`,fd);
+    if(!j.addAttachmentResult?.success)rest.push(ft);
+   }
+   x.fotos=rest;
+   if(rest.length)throw new Error(rest.length+" foto(s) no se subieron; el registro ya está en el servicio");
+   x.estado="enviado";delete x.err;await put(x);ok++;
+  }catch(e){x.estado="error";x.err=e.message;await put(x);fail++}
+ }
+ msg(`Enviados: ${ok}. Con error: ${fail}.`,5000);render();
+};
+
+/* ---------- inicio ---------- */
+(async()=>{await precargar();await elegir(+$("capa").value);render()})();
+if("storage" in navigator&&navigator.storage.persist)navigator.storage.persist();
+if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
